@@ -40,6 +40,8 @@ from tests.rsc.input_json_schemas_shopify import *
 
 from tests.rsc.input_json_schemas_invalid import *
 
+from tests.rsc.input_json_schemas_salesforce_surveryresponse import salesforce_survey_response
+
 list_of_schema_inputs = [test_schema_collection_anyOf_problem_column,
                          schema_nested_1,
                          schema_nested_1_subset_items_problem,
@@ -670,6 +672,21 @@ class TestStream(unittestcore.BaseUnitTest):
 
             # TODO: check data types
 
+    def test_anyOf_type(self):
+        # https: // github.com / adswerve / target - bigquery / pull / 18 / commits / e28346e6d45c024520bcf03ce6e9ad9e3f905fe3
+        schema = '{"type": "SCHEMA", "stream": "campaigns", "schema": {"type": ["null", "object"], "additionalProperties": false, "properties": {"id": { "type": [ "null", "string" ] }, "CreatedAt": { "anyOf": [ { "type": "string", "format": "date-time" }, { "type": [ "string", "null" ] } ] }}}, "key_properties": [ "id" ]}'
+        msg = singer.parse_message(schema)
+
+        schema_1_simplified = simplify(msg.schema)
+
+        schema_2_built_new_method = build_schema(schema_1_simplified, key_properties=msg.key_properties, add_metadata=True)
+
+        expected_timestamp_schemas = filter(lambda sf: sf.name in ["CreatedAt"], schema_2_built_new_method)
+        for sf in expected_timestamp_schemas:
+            self.assertEqual(sf.field_type, "STRING")
+
+        self.assertTrue(True)
+
 
     def test_several_nested_schemas_salesforce(self):
 
@@ -716,6 +733,68 @@ class TestStream(unittestcore.BaseUnitTest):
                 mismatches.update({next_schema_input['tap_stream_id']: [{"schema_0_input": schema_0_input, "schema_built_old_method_sorted": schema_built_old_method_sorted, "schema_built_new_method_sorted": schema_built_new_method_sorted}]})
 
         print("finished running")
+
+    def test_salesforce_SurveyResponse(self):
+
+        validate_json_schema_completeness(salesforce_survey_response)
+
+        schema_0_input = copy.deepcopy(salesforce_survey_response)
+
+        msg = singer.parse_message(schema_0_input)
+
+        schema_1_simplified = simplify(msg.schema)
+
+        schema_2_built_new_method = build_schema(schema_1_simplified, key_properties=msg.key_properties,
+                                                     add_metadata=True)
+
+        schema_3_built_old_method = build_schema_old(msg.schema, key_properties=msg.key_properties, add_metadata=True)
+
+        # are results of the two methods above identical? ignore order of columns and case
+        schema_built_new_method_sorted = convert_list_of_schema_fields_to_list_of_lists(schema_2_built_new_method)
+
+        schema_built_old_method_sorted = convert_list_of_schema_fields_to_list_of_lists(schema_3_built_old_method)
+
+        assert schema_built_new_method_sorted == schema_built_old_method_sorted
+
+
+    #
+    # def test_several_nested_schemas_salesforce_SurveyResponse(self):
+    #
+    #     catalog = json.load(open("./rsc/input_json_schemas_salesforce.json"))
+    #
+    #     for next_schema_input in catalog['streams']:
+    #
+    #         # TODO: unit test fails on Salesforce "SurveyResponse" stream
+    #         if next_schema_input["tap_stream_id"] == "SurveyResponse":
+    #
+    #             validate_json_schema_completeness(next_schema_input)
+    #
+    #             schema_0_input = copy.deepcopy(next_schema_input)
+    #
+    #             schema_0_input.update({"type": "SCHEMA"})
+    #
+    #             schema_0_input.update({"key_properties": "Id"})
+    #
+    #             schema_0_input = str(schema_0_input)
+    #
+    #             schema_0_input = schema_0_input.replace("\'", "\"").replace("True","true").replace("False","false")
+    #
+    #             msg = singer.parse_message(schema_0_input)
+    #
+    #             schema_1_simplified = simplify(msg.schema)
+    #
+    #             schema_2_built_new_method = build_schema(schema_1_simplified, key_properties=msg.key_properties,
+    #                                                          add_metadata=True)
+    #
+    #             schema_3_built_old_method = build_schema_old(msg.schema, key_properties=msg.key_properties, add_metadata=True)
+    #
+    #             # are results of the two methods above identical? ignore order of columns and case
+    #             schema_built_new_method_sorted = convert_list_of_schema_fields_to_list_of_lists(schema_2_built_new_method)
+    #
+    #             schema_built_old_method_sorted = convert_list_of_schema_fields_to_list_of_lists(schema_3_built_old_method)
+    #
+    #             assert schema_built_new_method_sorted == schema_built_old_method_sorted
+
 
 
     def test_several_nested_schemas_shopify(self):
